@@ -13,15 +13,23 @@ use Illuminate\Support\Str;
 
 class OdevController extends BaseController
 {
+    private $tumBenzerKelimeler = [];
+
     public function index()
     {
         $odevler = Odevler::all();
         foreach ($odevler as $key => $asilOdev) {
             $asilOdev->ortalama = 0;
             $asilOdevHaricOdevler = $odevler->forget($key);
-            if (isset($this->odevKarsilastir($asilOdev, $asilOdevHaricOdevler)[$asilOdev->id])) {
-                $yuzdeler = $this->odevKarsilastir($asilOdev, $asilOdevHaricOdevler)[$asilOdev->id];
-                $asilOdev->ortalama = number_format(array_sum($yuzdeler) / $asilOdevHaricOdevler->count(),2);
+            $odevKarsilastir = $this->odevKarsilastir($asilOdev, $asilOdevHaricOdevler, true);
+            $odevKarsilastir2 = $this->odevKarsilastir($asilOdev, $asilOdevHaricOdevler, false);
+            if (isset($odevKarsilastir[$asilOdev->id])) {
+                $yuzdeler = $odevKarsilastir[$asilOdev->id];
+                $asilOdev->ortalama_akhkat = number_format(array_sum($yuzdeler) / $asilOdevHaricOdevler->count(), 2);
+            }
+            if (isset($odevKarsilastir2[$asilOdev->id])) {
+                $yuzdeler = $odevKarsilastir2[$asilOdev->id];
+                $asilOdev->ortalama_akhkatma = number_format(array_sum($yuzdeler) / $asilOdevHaricOdevler->count(), 2);
             }
             $odevler->push($asilOdev);
         }
@@ -74,7 +82,7 @@ class OdevController extends BaseController
         return back();
     }
 
-    private function odevKarsilastir($asilOdev, $odevler)
+    private function odevKarsilastir($asilOdev, $odevler, $ayniKelimeyiHesabaKatma = false)
     {
         $asilFile = fopen(public_path() . "/files/" . $asilOdev->dosya_adi, "r") or die("Unable to open file!");
         $asilIcerik = mb_convert_encoding(fread($asilFile, filesize(public_path() . "/files/" . $asilOdev->dosya_adi)), "UTF-8", "ISO-8859-9");
@@ -102,8 +110,17 @@ class OdevController extends BaseController
                 }
                 for ($i = 0; $i < strlen($buyuk); $i += $length) {
                     $parca = substr($kucuk, $i, $length);
-                    if ($parca && Str::contains($buyuk, [$parca])) {
-                        $benzerKelimeSayisi[] = $parca;
+                    $temizlenmisParca = trim(preg_replace('/\s\s+/', ' ', $parca));
+                    if ($ayniKelimeyiHesabaKatma) {
+                        if ($temizlenmisParca && Str::contains($buyuk, [$temizlenmisParca]) && !in_array($temizlenmisParca, $this->tumBenzerKelimeler)) {
+                            $benzerKelimeSayisi[] = $temizlenmisParca;
+                            $this->tumBenzerKelimeler[] = $temizlenmisParca;
+                        }
+                    }
+                    else {
+                        if ($temizlenmisParca && Str::contains($buyuk, [$temizlenmisParca])) {
+                            $benzerKelimeSayisi[] = $temizlenmisParca;
+                        }
                     }
                 }
                 $benzerS = strlen(implode('', array_unique($benzerKelimeSayisi)));
